@@ -1,1 +1,1 @@
-# dictionarium-priberium
+# dictionarium-priberum

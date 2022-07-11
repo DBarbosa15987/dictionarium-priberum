@@ -5,6 +5,7 @@ import sys
 import json
 import re
 
+
 @dataclass
 class Header:
 	palavra: str
@@ -88,16 +89,15 @@ def getDefs(soup):
 	return output
 
 
-def bold(str):
-	return "\033[1m" + str + "\033[0m"
+def bold(string):
+	return "\033[1m" + string + "\033[0m"
 
 
-def underline(str):
-	return "\033[4m" + str + "\033[0m"
+def underline(string):
+	return "\033[4m" + string + "\033[0m"
 
 
 def pp(resultado):
-
 	print(bold(resultado.palavra) + '\n')
 	for h in resultado.header:
 		print(bold(h.palavra) + ': ' + h.tipo)
@@ -111,6 +111,27 @@ def pp(resultado):
 		print('\n')
 
 
+def checkWord(soup):
+	error = ""
+	check = soup.find('div', class_='alert alert-info')
+
+	if check is not None:
+		errorMessage = ""
+
+		if 'Sugerir' in check.text:
+			errorMessage += 'Palavra não encontrada. Pode sugerir a adição da palavra no site do dicionário priberam, '
+			errorMessage += 'eu aqui só faço scrape.'
+		else:
+			errorMessage += 'Palavra não encontrada. Será que procura alguma destas palavras abaixo?\n'
+			errorMessage += 'Se não, sei lá.\n'
+
+		error += errorMessage
+		sugestoes = soup.find('div', class_='pb-sugestoes-afastadas').text
+		error += sugestoes
+
+	return error
+
+
 def main():
 	args = sys.argv[1:]
 	pal = args[0]
@@ -118,8 +139,19 @@ def main():
 
 	request = link + pal
 	htmlResponse = requests.get(request)
+
+	if htmlResponse.status_code != 200:
+		print("Failed, request inválido.")
+		return
+
 	htmlText = htmlResponse.text
 	soup = BeautifulSoup(htmlText, 'lxml')
+
+	error = checkWord(soup)
+	if error != "":
+		print(bold(pal) + '\n')
+		print(error)
+		return
 
 	header = getHeader(soup)
 	defs = getDefs(soup)

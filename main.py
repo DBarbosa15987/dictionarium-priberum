@@ -5,17 +5,10 @@ import sys
 import json
 import re
 
-
 @dataclass
-class Resultado:
-	header: list  # Match, pode apenas ser uma str, vamos ver
-	definicoes: list  # Definicao
-
-
-@dataclass
-class Match:
+class Header:
 	palavra: str
-	tipos: list  # Pode ser ignorado
+	tipo: str  # Pode ser ignorado
 
 
 @dataclass
@@ -25,6 +18,13 @@ class Definicao:
 	tipo: str
 	defs: list
 	context: set
+
+
+@dataclass
+class Resultado:
+	header: list  # Match, pode apenas ser uma str, vamos ver
+	definicoes: list  # Definicao
+	palavra: str
 
 
 link = "https://dicionario.priberam.org/"
@@ -37,9 +37,8 @@ def getHeader(soup):
 
 	for match in defHeaderDivs:
 		word = match.find('span', class_='varpt').text
-		classesList = match.find_all('em')
-		classes = [classe.text for classe in classesList]
-		matches.append(Match(word, classes))
+		classes = match.find('em').text
+		matches.append(Header(word, classes))
 
 	return matches
 
@@ -50,6 +49,8 @@ def getDefs(soup):
 	resultados = [r for r in resultados if r != '\n']
 	resultados = list(resultados[-1].children)
 	resultados = [r for r in resultados if r != '\n' and r.find('div')]
+
+	output = []
 
 	for resultado in resultados:
 
@@ -69,11 +70,11 @@ def getDefs(soup):
 				trash.decompose()
 
 		defs = [d.text for d in defs]
-		defs = [re.sub(' {2,}|\\n|\\xa0|\[\]', '', d) for d in defs] # ' {2,}|\\n|\\xa0|\[\]'
+		defs = [re.sub(' {2,}|\\n|\\xa0|\[\]', '', d) for d in defs]
 
 		context = set()
 		for d in defs:
-			s = re.search('\[[^\]]*\]', d) # \[[^\]]*\]
+			s = re.search('\[[^\]]*\]', d)
 			if s is not None:
 
 				s = re.sub('[\[\]]', '', s.group())
@@ -82,24 +83,49 @@ def getDefs(soup):
 					context.add(elem)
 
 		newDef = Definicao(palavra, origem, classe, defs, context)
-		print(newDef, end='\n\n')
+		output.append(newDef)
+
+	return output
+
+
+def bold(str):
+	return "\033[1m" + str + "\033[0m"
+
+
+def underline(str):
+	return "\033[4m" + str + "\033[0m"
+
+
+def pp(resultado):
+
+	print(bold(resultado.palavra) + '\n')
+	for h in resultado.header:
+		print(bold(h.palavra) + ': ' + h.tipo)
+	print('\n')
+
+	for def_ in resultado.definicoes:
+		print(bold(def_.palavra) + ", " + def_.tipo)
+		print('(' + def_.origem + ')\n')
+		for deff in def_.defs:
+			print(deff)
+		print('\n')
 
 
 def main():
 	args = sys.argv[1:]
 	pal = args[0]
-	# with open(args[1], 'w') as f:
-	# 	print(f"{args[1]} criada\n")
+	# f = open(args[1], 'w')
 
 	request = link + pal
 	htmlResponse = requests.get(request)
 	htmlText = htmlResponse.text
 	soup = BeautifulSoup(htmlText, 'lxml')
 
-	matches = getHeader(soup)
-	# print(matches, end='\n')
+	header = getHeader(soup)
+	defs = getDefs(soup)
 
-	getDefs(soup)
+	resultado = Resultado(header, defs, pal)
+	pp(resultado)
 
 
 if __name__ == "__main__":

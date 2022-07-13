@@ -4,17 +4,18 @@ import requests
 import sys
 import json
 import re
+import time
 
 
 @dataclass
 class Header:
-	palavra: str
+	palavra: str  # A variação da palavra
 	tipo: str  # Pode ser ignorado
 
 
 @dataclass
 class Definicao:
-	palavra: str
+	palavra: str  # A variação da palavra
 	origem: str
 	tipo: str
 	defs: list
@@ -25,7 +26,7 @@ class Definicao:
 class Resultado:
 	header: list  # Match, pode apenas ser uma str, vamos ver
 	definicoes: list  # Definicao
-	palavra: str
+	palavra: str  # A match no dicionário
 
 
 link = "https://dicionario.priberam.org/"
@@ -111,7 +112,7 @@ def pp(resultado):
 		print('\n')
 
 
-def checkWord(soup):
+def checkWord(soup, pal):
 	error = ""
 	check = soup.find('div', class_='alert alert-info')
 
@@ -119,10 +120,10 @@ def checkWord(soup):
 		errorMessage = ""
 
 		if 'Sugerir' in check.text:
-			errorMessage += 'Palavra não encontrada. Pode sugerir a adição da palavra no site do dicionário priberam, '
+			errorMessage += f'Palavra ({pal}) não encontrada. Pode sugerir a adição da palavra no site do dicionário priberam, '
 			errorMessage += 'eu aqui só faço scrape.'
 		else:
-			errorMessage += 'Palavra não encontrada. Será que procura alguma destas palavras abaixo?\n'
+			errorMessage += f'Palavra ({pal}) não encontrada. Será que procura alguma destas palavras abaixo?\n'
 			errorMessage += 'Se não, sei lá.\n'
 
 		error += errorMessage
@@ -132,32 +133,89 @@ def checkWord(soup):
 	return error
 
 
+# !! O METRÔ AINDA APARECE E SINÓNIMOSINÔNIMO
+# CONJUGARCONJUGAR
+# 999282 palavras
 def main():
-	args = sys.argv[1:]
-	pal = args[0]
-	# f = open(args[1], 'w')
+	# args = sys.argv[1:]
+	# pal = args[0]
+	f = open("test.json", 'a', encoding='utf-8')
+	f.write('{\n')
+	r = open("dics/z.txt", 'r', encoding="ISO-8859-1")
+	i = 1
 
-	request = link + pal
-	htmlResponse = requests.get(request)
+	while True:
 
-	if htmlResponse.status_code != 200:
-		print("Failed, request inválido.")
-		return
+		pal = r.readline()
 
-	htmlText = htmlResponse.text
-	soup = BeautifulSoup(htmlText, 'lxml')
+		print(str(i) + " " + pal)
 
-	error = checkWord(soup)
-	if error != "":
-		print(bold(pal) + '\n')
-		print(error)
-		return
+		# Sim, parece que o python é lazy
+		# acabou or \n or coisas de teste
+		if pal == "" or pal[0] == '\n' or pal[0] != 'z':
+			break
 
-	header = getHeader(soup)
-	defs = getDefs(soup)
+		# remover o '\n' do readline()
+		pal = pal[:-1]
+		request = link + pal
+		htmlResponse = requests.get(request)
+		# time.sleep(2)
 
-	resultado = Resultado(header, defs, pal)
-	pp(resultado)
+		if htmlResponse.status_code != 200:
+			print(f"Failed na palavra {pal}, request inválido. Code {htmlResponse.status_code}")
+		# return
+
+		else:
+			htmlText = htmlResponse.text  # .encode('latin1', 'ignore').decode('utf8', 'ignore')
+			soup = BeautifulSoup(htmlText, 'lxml')
+
+			error = checkWord(soup, pal)
+			if error != "":
+				print(bold(pal) + '\n')
+				print(error)
+				pass
+
+			else:
+
+				if i != 1:
+					f.write(',\n')
+				i += 1
+
+				header = getHeader(soup)
+				defs = getDefs(soup)
+				resultado = Resultado(header, defs, pal)
+
+				# dic = {resultado.palavra: [
+				# 	resultado.palavra,
+				# 	[[e.palavra, e.tipo] for e in resultado.header],
+				# 	[[e.palavra, e.origem, e.tipo, e.defs, list(e.context)] for e in resultado.definicoes]
+				# ]}
+
+				dic = {resultado.palavra: {
+
+					"palavra": resultado.palavra,
+					"header": [[e.palavra, e.tipo] for e in resultado.header],
+					"def": [{
+						"palavra": e.palavra,
+						"origem": e.origem,
+						"tipo": e.tipo,
+						"defs": e.defs,
+						"contexto": list(e.context)
+					} for e in resultado.definicoes]
+				}
+
+				}
+
+				# print(dic)
+				jsonStr = json.dumps(dic, ensure_ascii=False, indent=4)
+				f.write(jsonStr[1:-1])
+				dic.clear()
+
+	f.write('}\n')
+	f.close()
+
+
+# pp(resultado)
 
 
 if __name__ == "__main__":

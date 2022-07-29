@@ -273,7 +273,7 @@ def main():
 
 	f = open(args[0], 'w', encoding='utf-8')
 	f.write('{\n')
-	r = open("dics/wordlist-big-latest.txt", 'r', encoding="ISO-8859-1")
+	r = open("dics/wordlist.txt", 'r', encoding="ISO-8859-1")
 	err = open("err.log", 'w', encoding='utf-8')
 
 	rLock = Lock()

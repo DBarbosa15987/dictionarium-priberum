@@ -2,9 +2,10 @@ import bs4.element
 from bs4 import BeautifulSoup
 from dataclasses import dataclass
 import requests
-import sys
 import json
 import re
+from threading import Lock, Thread
+import sys
 import time
 
 
@@ -20,7 +21,9 @@ class Definicao:
 	origem: str
 	tipo: str
 	defs: list
+	extras: list
 	context: set
+	sinonimos: list
 
 
 @dataclass
@@ -31,6 +34,7 @@ class Resultado:
 
 
 link = "https://dicionario.priberam.org/"
+i = 1
 
 
 def getHeader(soup):
@@ -39,9 +43,9 @@ def getHeader(soup):
 
 	defHeaderDiv2 = []
 
-	for (i, d) in enumerate(defHeaderDivs1):  # ver o 'nado'
-		if defHeaderDivs1[i].text != '':
-			defHeaderDiv2 = list(defHeaderDivs1[i].children)
+	for (j, d) in enumerate(defHeaderDivs1):  # ver o 'nado'
+		if defHeaderDivs1[j].text != '':
+			defHeaderDiv2 = list(defHeaderDivs1[j].children)
 			defHeaderDiv2 = [e for e in defHeaderDiv2 if not isinstance(e, bs4.element.NavigableString)]
 			break
 		else:
@@ -84,13 +88,15 @@ def getDefs(soup):
 
 	for resultado in resultados:
 
-		# 'metro- metro- 1' -> 'metro- 1'
+		# Para cada resultado, são tratadas as palavras caso sejam estrangeirismos
+		verbeteh = resultado.find('span', class_='verbeteh1')
+		if verbeteh is not None:
+			palavraPT = verbeteh.find('h2').find('span', class_='varpt')
+			if palavraPT is not None:
+				palavra = palavraPT.text.split()
+			else:
+				palavra = verbeteh.find('h2').text
 
-		# Isto aqui refere-se a uma definição, se o valor for None podem ser palavras relacionadas e tal...
-		palavraList = resultado.find('span', class_='verbeteh1')
-		if palavraList is not None:
-			palavraList = palavraList.find('h2').text.split()[1:]
-			palavra = ''.join(palavraList)
 		else:
 			break
 
@@ -99,9 +105,9 @@ def getDefs(soup):
 		childreen = resultado.find('span', class_='verbeteh1').parent.children
 		childreen = [c.text for c in childreen]
 
-		for i, c in enumerate(childreen):
+		for k, c in enumerate(childreen):
 			if c == '(':
-				for j in range(i, len(childreen)):
+				for j in range(k, len(childreen)):
 					origem += childreen[j]
 					if childreen[j] == ')':
 						break
@@ -112,15 +118,27 @@ def getDefs(soup):
 
 		classe = resultado.find('categoria_ext_aao').text
 
-		defs = resultado.find_all('p')
-		for d in defs:
+		defsRaw = resultado.find_all('p')
+		for d in defsRaw:
 
 			if d.find('dominio_ext_pb') is not None:
 				trash = d.find('dominio_ext_pb')
 				trash.decompose()
 
-		defs = [d.text for d in defs]
-		defs = [re.sub(' {2,}|\\n|\\xa0|\[\]', '', d) for d in defs]
+			if d.find('span', class_="varpb") is not None:
+				trash = d.find('span', class_="varpb")
+				trash.decompose()
+
+		defs, extras, sinonimos = [], [], []
+
+		for d in defsRaw:
+			novo = re.sub(' {2,}|\\n|\\xa0|\[\]', '', d.text)
+			if "Sinónimo Geral:" in novo:
+				sinonimos.extend(re.sub("Sinónimo Geral:", '', novo).split())
+			elif '•' in novo:
+				extras.append(novo)
+			else:
+				defs.append(novo)
 
 		context = set()
 		for d in defs:
@@ -132,7 +150,7 @@ def getDefs(soup):
 				for elem in lista:
 					context.add(elem)
 
-		newDef = Definicao(palavra, origem, classe, defs, context)
+		newDef = Definicao(palavra, origem, classe, defs, extras, context, sinonimos)
 		output.append(newDef)
 
 	return output
@@ -144,6 +162,14 @@ def bold(string):
 
 def underline(string):
 	return "\033[4m" + string + "\033[0m"
+
+
+def red(string):
+	return '\033[0;31m' + string + "\033[0m"
+
+
+def green(string):
+	return '\033[0;32m' + string + "\033[0m"
 
 
 def pp(resultado):
@@ -159,7 +185,7 @@ def pp(resultado):
 		print('\n')
 
 
-def checkWord(soup, pal, err):
+def checkWord(soup, pal, err, wLock):
 	error = ""
 	check = soup.find('div', id='resultados')
 	if "Palavra não encontrada" in check.text:
@@ -170,85 +196,107 @@ def checkWord(soup, pal, err):
 		errorMessage = ""
 
 		if 'Sugerir' in check.text:
-			errorMessage += f'Palavra ({pal}) não encontrada. Pode sugerir a adição da palavra no site do dicionário priberam, '
-			errorMessage += 'eu aqui só faço scrape.'
+			errorMessage += f'Palavra ({pal}) não encontrada. Sem sugestões'
 		else:
-			errorMessage += f'Palavra ({pal}) não encontrada. Será que procura alguma destas palavras abaixo?\n'
-			errorMessage += 'Se não, sei lá.\n'
+			errorMessage += f'Palavra ({pal}) não encontrada. Sugestões:'
 
 		error += errorMessage
-		err.write(error.replace('\n', ' ') + '\n')
-		sugestoes = soup.find('div', class_='pb-sugestoes-afastadas').text
+		sugestoes = soup.find('div', class_='pb-sugestoes-afastadas').text.replace('\n', ' | ')
 		error += sugestoes
+		wLock.acquire()
+		err.write(error.replace('\n', ' ') + '\n')
+		wLock.release()
 
 	return error
 
 
+def makeRequest(pal, f, err, wLock):
+
+	# remover o '\n' do readline()
+	pal = pal[:-1]
+	request = link + pal
+	htmlResponse = requests.get(request)
+
+	if htmlResponse.status_code != 200:
+		print(f"Failed na palavra {pal}, request inválido. Code {htmlResponse.status_code}")
+
+	else:
+		htmlText = htmlResponse.text
+		soup = BeautifulSoup(htmlText, 'lxml')
+
+		error = checkWord(soup, pal, err, wLock)
+		if error != "":
+			print(bold(pal) + '\n')
+			print(error)
+
+		else:
+
+			header = getHeader(soup)
+			defs = getDefs(soup)
+			resultado = Resultado(header, defs, pal)
+
+			dic = {resultado.palavra: {
+
+				"palavra": resultado.palavra,
+				# Este header ainda ta meio ranhoso
+				"header": [[e.palavra, e.tipo] for e in resultado.header],
+				"def": [{
+					"palavra": e.palavra,
+					"origem": e.origem,
+					"tipo": e.tipo,
+					"defs": e.defs,
+					"extras": e.extras,
+					"contexto": list(e.context),
+					"sinónimos": e.sinonimos
+				} for e in resultado.definicoes]
+			}
+
+			}
+
+			jsonStr = json.dumps(dic, ensure_ascii=False, indent=4)
+			wLock.acquire()
+			global i
+			print(str(i) + " " + pal)
+			if i != 1:
+				f.write(',')
+			i += 1
+			f.write(jsonStr[1:-1])
+			wLock.release()
+			dic.clear()
+
+
 # !! O METRÔ AINDA APARECE E SINÓNIMOSINÔNIMO
-# 40.[Portugal: Alentejo][Portugal: Alentejo][Música]Solista que inicia uma moda no cante alentejano.",
 # "palavra": "|ô|tor·re|ô|",
 # 999282 palavras
 def main():
-	f = open("test.json", 'w', encoding='utf-8')
+	args = sys.argv[1:]
+
+	f = open(args[0], 'w', encoding='utf-8')
 	f.write('{\n')
 	r = open("dics/wordlist-big-latest.txt", 'r', encoding="ISO-8859-1")
 	err = open("err.log", 'w', encoding='utf-8')
-	i = 1
+
+	rLock = Lock()
+	wLock = Lock()
+	threads = []
 
 	while True:
 
+		time.sleep(0.15)
+		rLock.acquire()
 		pal = r.readline()
+		rLock.release()
 
 		if pal == "":
 			break
-		print(str(i) + " " + pal)
 
-		# remover o '\n' do readline()
-		pal = pal[:-1]
-		request = link + pal
-		htmlResponse = requests.get(request)
+		# makeRequest(pal, f, err, wLock)
+		t = Thread(target=makeRequest, args=(pal, f, err, wLock))
+		threads.append(t)
+		t.start()
 
-		if htmlResponse.status_code != 200:
-			print(f"Failed na palavra {pal}, request inválido. Code {htmlResponse.status_code}")
-
-		else:
-			htmlText = htmlResponse.text
-			soup = BeautifulSoup(htmlText, 'lxml')
-
-			error = checkWord(soup, pal, err)
-			if error != "":
-				print(bold(pal) + '\n')
-				print(error)
-
-			else:
-
-				if i != 1:
-					f.write(',\n')
-				i += 1
-
-				header = getHeader(soup)
-				defs = getDefs(soup)
-				resultado = Resultado(header, defs, pal)
-
-				dic = {resultado.palavra: {
-
-					"palavra": resultado.palavra,
-					# Este header ainda ta meio ranhoso
-					"header": [[e.palavra, e.tipo] for e in resultado.header],
-					"def": [{
-						"palavra": e.palavra,
-						"origem": e.origem,
-						"tipo": e.tipo,
-						"defs": e.defs,
-						"contexto": list(e.context)
-					} for e in resultado.definicoes]
-				}
-
-				}
-
-				jsonStr = json.dumps(dic, ensure_ascii=False, indent=4)
-				f.write(jsonStr[1:-1])
-				dic.clear()
+	for t in threads:
+		t.join()
 
 	f.write('}\n')
 	f.close()

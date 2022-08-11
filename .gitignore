@@ -5,3 +5,7 @@ bruh
 *.json
 dics/*.txt
 *.log
+diffs
+collector.py
+output/*.json
+backup

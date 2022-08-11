@@ -217,7 +217,6 @@ def checkWord(soup, pal, err, wLock):
 
 
 def makeRequest(pal, f, err, wLock, log):
-
 	request = link + pal
 	htmlResponse = requests.get(request)
 
@@ -239,22 +238,22 @@ def makeRequest(pal, f, err, wLock, log):
 			defs = getDefs(soup, log)
 			resultado = Resultado(header, defs, pal)
 
-			dic = {resultado.palavra: {
+			dic = {
+				resultado.palavra: {
 
-				"palavra": resultado.palavra,
-				# Este header ainda ta meio ranhoso
-				"header": [[e.palavra, e.tipo] for e in resultado.header],
-				"def": [{
-					"palavra": e.palavra,
-					"origem": e.origem,
-					"tipo": e.tipo,
-					"defs": e.defs,
-					"extras": e.extras,
-					"contexto": list(e.context),
-					"sinónimos": e.sinonimos
-				} for e in resultado.definicoes]
-			}
-
+					"palavra": resultado.palavra,
+					# Este header ainda ta meio ranhoso
+					"header": [[e.palavra, e.tipo] for e in resultado.header],
+					"def": [{
+						"palavra": e.palavra,
+						"origem": e.origem,
+						"tipo": e.tipo,
+						"defs": e.defs,
+						"extras": e.extras,
+						"contexto": list(e.context),
+						"sinónimos": e.sinonimos
+					} for e in resultado.definicoes]
+				}
 			}
 
 			jsonStr = json.dumps(dic, ensure_ascii=False, indent=4)
@@ -269,19 +268,13 @@ def makeRequest(pal, f, err, wLock, log):
 			dic.clear()
 
 
-# !! O METRÔ AINDA APARECE E SINÓNIMOSINÔNIMO
-# "palavra": "|ô|tor·re|ô|",
-# "palavra": [
-#                     "a·da·mas·tor",
-#                     "|ô|"
-#                 ],
 # 999 282 palavras
 def main():
 	args = sys.argv[1:]
 
 	if len(args) > 1:
 		mode = 'a'
-		trueCount = int(args[1])-1
+		trueCount = int(args[1]) - 1
 	else:
 		mode = 'w'
 		trueCount = 0
@@ -293,7 +286,7 @@ def main():
 	else:
 		f.write(',')
 
-	r = open("dics/wordlist.txt", 'r', encoding="ISO-8859-1")
+	r = open("dics/wordlist2.txt", 'r', encoding="ISO-8859-1")
 	err = open("err.log", 'w', encoding="ISO-8859-1")
 	log = open("logs.log", 'w', encoding="ISO-8859-1")
 

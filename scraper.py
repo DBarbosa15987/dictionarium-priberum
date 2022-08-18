@@ -43,7 +43,7 @@ def getHeader(soup):
 
 	defHeaderDiv2 = []
 
-	for (j, d) in enumerate(defHeaderDivs1):  # ver o 'nado'
+	for (j, d) in enumerate(defHeaderDivs1):
 		if defHeaderDivs1[j].text != '':
 			defHeaderDiv2 = list(defHeaderDivs1[j].children)
 			defHeaderDiv2 = [e for e in defHeaderDiv2 if not isinstance(e, bs4.element.NavigableString)]
@@ -77,7 +77,7 @@ def getHeader(soup):
 	return matches
 
 
-def getDefs(soup, log):
+def getDefs(soup):
 	# Navegação pela árvore dos resultados, no final isto tem-se a lista com os divs correspondentes às definições das
 	# palavras
 	resultados = list(soup.find('div', id='resultados').div.children)
@@ -99,9 +99,6 @@ def getDefs(soup, log):
 				palavra = verbeteh.find('h2').text
 
 			palavra = re.sub(r'\|.*\|', '', palavra)
-
-			if palavra == "":
-				log.write("bruh\n")
 
 		else:
 			break
@@ -216,7 +213,7 @@ def checkWord(soup, pal, err, wLock):
 	return error
 
 
-def makeRequest(pal, f, err, wLock, log):
+def makeRequest(pal, f, err, wLock):
 	request = link + pal
 	htmlResponse = requests.get(request)
 
@@ -235,7 +232,7 @@ def makeRequest(pal, f, err, wLock, log):
 		else:
 
 			header = getHeader(soup)
-			defs = getDefs(soup, log)
+			defs = getDefs(soup)
 			resultado = Resultado(header, defs, pal)
 
 			dic = {
@@ -287,8 +284,7 @@ def main():
 		f.write(',')
 
 	r = open("dics/wordlist2.txt", 'r', encoding="ISO-8859-1")
-	err = open("err.log", 'w', encoding="ISO-8859-1")
-	log = open("logs.log", 'w', encoding="ISO-8859-1")
+	err = open("err.log", mode, encoding="ISO-8859-1")
 
 	rLock = Lock()
 	wLock = Lock()
@@ -308,7 +304,7 @@ def main():
 		# Sequencial
 		# makeRequest(pal, f, err, wLock)
 
-		t = Thread(target=makeRequest, args=(pal, f, err, wLock, log))
+		t = Thread(target=makeRequest, args=(pal, f, err, wLock))
 		threads.append(t)
 		time.sleep(0.15)
 		t.start()

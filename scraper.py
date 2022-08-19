@@ -238,17 +238,17 @@ def makeRequest(pal, f, err, wLock):
 			dic = {
 				resultado.palavra: {
 
-					"palavra": resultado.palavra,
+					"palavra": None if resultado.palavra == "" else resultado.palavra,
 					# Este header ainda ta meio ranhoso
-					"header": [[e.palavra, e.tipo] for e in resultado.header],
-					"def": [{
-						"palavra": e.palavra,
-						"origem": e.origem,
-						"tipo": e.tipo,
-						"defs": e.defs,
-						"extras": e.extras,
-						"contexto": list(e.context),
-						"sinónimos": e.sinonimos
+					"header": None if resultado.header == [] else [[e.palavra, e.tipo] for e in resultado.header],
+					"def": None if resultado.definicoes == [] else [{
+						"palavra": None if e.palavra == "" else e.palavra,
+						"origem": None if e.origem == "" else e.origem,
+						"tipo": None if e.tipo == "" else e.tipo,
+						"defs": None if e.defs == [] or e.defs == [""] else e.defs,
+						"extras": None if e.extras == [] else e.extras,
+						"contexto": None if list(e.context) == [] else list(e.context),
+						"sinónimos": None if e.sinonimos == [] else e.sinonimos
 					} for e in resultado.definicoes]
 				}
 			}
@@ -283,7 +283,7 @@ def main():
 	else:
 		f.write(',')
 
-	r = open("dics/wordlist2.txt", 'r', encoding="ISO-8859-1")
+	r = open("dics/teste.txt", 'r', encoding="ISO-8859-1")
 	err = open("err.log", mode, encoding="ISO-8859-1")
 
 	rLock = Lock()
@@ -304,6 +304,7 @@ def main():
 		# Sequencial
 		# makeRequest(pal, f, err, wLock)
 
+		# Concorrente
 		t = Thread(target=makeRequest, args=(pal, f, err, wLock))
 		threads.append(t)
 		time.sleep(0.15)

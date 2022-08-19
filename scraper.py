@@ -12,14 +12,14 @@ import time
 @dataclass
 class Header:
 	palavra: str  # A variação da palavra
-	tipo: str  # Pode ser ignorado
+	classe: str
 
 
 @dataclass
 class Definicao:
 	palavra: str  # A variação da palavra
 	origem: str
-	tipo: str
+	classe: str
 	defs: list
 	extras: list
 	context: set
@@ -28,8 +28,8 @@ class Definicao:
 
 @dataclass
 class Resultado:
-	header: list  # Match, pode apenas ser uma str, vamos ver
-	definicoes: list  # Definicao
+	header: list
+	definicoes: list  # Definição
 	palavra: str  # A match no dicionário
 
 
@@ -53,7 +53,7 @@ def getHeader(soup):
 
 	matches = []
 
-	# tratar aqui dos acordos ortográficos
+	# Tratar aqui dos acordos ortográficos
 	for match in defHeaderDiv2:
 		maybeWord = match.find('span', class_='varpt')
 		if len(list(maybeWord.children)) > 0:
@@ -103,7 +103,7 @@ def getDefs(soup):
 		else:
 			break
 
-		# Quem tiver solução melhor está convidado a educar-me, eu sou mau.
+		# Ignorem isto, tava confuso na altura e não tenho pachorra para dar fix
 		origem = ""
 		childreen = resultado.find('span', class_='verbeteh1').parent.children
 		childreen = [c.text for c in childreen]
@@ -135,7 +135,7 @@ def getDefs(soup):
 		defs, extras, sinonimos = [], [], []
 
 		for d in defsRaw:
-			novo = re.sub(' {2,}|\\n|\\xa0|\[\]', '', d.text)
+			novo = re.sub(r' {2,}|\n|\xa0|\[]', '', d.text)
 			if "Sinónimo Geral:" in novo:
 				sinonimos.extend(re.sub("Sinónimo Geral:", '', novo).split())
 			elif '•' in novo:
@@ -145,10 +145,10 @@ def getDefs(soup):
 
 		context = set()
 		for d in defs:
-			s = re.search('\[[^\]]*\]', d)
+			s = re.search(r'\[[^]]*]', d)
 			if s is not None:
 
-				s = re.sub('[\[\]]', '', s.group())
+				s = re.sub(r'[\[\]]', '', s.group())
 				lista = s.split(', ')
 				for elem in lista:
 					context.add(elem)
@@ -178,11 +178,11 @@ def green(string):
 def pp(resultado):
 	print(bold(resultado.palavra) + '\n')
 	for h in resultado.header:
-		print(bold(h.palavra) + ': ' + h.tipo)
+		print(bold(h.palavra) + ': ' + h.classe)
 	print('\n')
 
 	for def_ in resultado.definicoes:
-		print(bold(def_.palavra) + ", " + def_.tipo)
+		print(bold(def_.palavra) + ", " + def_.classe)
 		for deff in def_.defs:
 			print(deff)
 		print('\n')
@@ -240,11 +240,11 @@ def makeRequest(pal, f, err, wLock):
 
 					"palavra": None if resultado.palavra == "" else resultado.palavra,
 					# Este header ainda ta meio ranhoso
-					"header": None if resultado.header == [] else [[e.palavra, e.tipo] for e in resultado.header],
+					"header": None if resultado.header == [] else [[e.palavra, e.classe] for e in resultado.header],
 					"def": None if resultado.definicoes == [] else [{
 						"palavra": None if e.palavra == "" else e.palavra,
 						"origem": None if e.origem == "" else e.origem,
-						"tipo": None if e.tipo == "" else e.tipo,
+						"classe": None if e.classe == "" else e.classe,
 						"defs": None if e.defs == [] or e.defs == [""] else e.defs,
 						"extras": None if e.extras == [] else e.extras,
 						"contexto": None if list(e.context) == [] else list(e.context),
@@ -283,7 +283,7 @@ def main():
 	else:
 		f.write(',')
 
-	r = open("dics/teste.txt", 'r', encoding="ISO-8859-1")
+	r = open("dics/wordlist.txt", 'r', encoding="ISO-8859-1")
 	err = open("err.log", mode, encoding="ISO-8859-1")
 
 	rLock = Lock()
@@ -307,7 +307,7 @@ def main():
 		# Concorrente
 		t = Thread(target=makeRequest, args=(pal, f, err, wLock))
 		threads.append(t)
-		time.sleep(0.15)
+		time.sleep(0.15)  # Aqui fazes o quão rápido te atreveres
 		t.start()
 
 	for t in threads:

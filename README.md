@@ -1,4 +1,4 @@
-# dictionarium-priberum
+# dictionarium-priberum [deprecated]
 
 Webscrapper do site do dicionário priberam usado para criar um dicionário em formato json.\
 O resultado do webscrapping está no <b><u>output</u></b> e a lista de palavras procuradas está no <b><u>dics</b></u>.\
